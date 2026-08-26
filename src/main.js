@@ -1,4 +1,7 @@
 import { gsap } from 'gsap';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import './styles.css';
 
 const parts = {
@@ -64,7 +67,8 @@ document.querySelector('#app').innerHTML = `
 
       <div class="product-canvas" id="productCanvas">
         <div class="product-motion" id="productMotion">
-          <svg class="line-art" id="lineArt" viewBox="0 0 631 631" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <div class="line-art-motion" id="lineArtMotion" aria-hidden="true">
+          <svg class="line-art" id="lineArt" viewBox="0 0 631 631" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M315.089 464.743C397.73 464.743 464.724 397.749 464.724 315.107C464.724 232.466 397.73 165.471 315.089 165.471C232.447 165.471 165.453 232.466 165.453 315.107C165.453 397.749 232.447 464.743 315.089 464.743Z" />
             <path d="M315.088 611.1C478.56 611.1 611.08 478.58 611.08 315.109C611.08 151.637 478.56 19.1172 315.088 19.1172C151.617 19.1172 19.0967 151.637 19.0967 315.109C19.0967 478.58 151.617 611.1 315.088 611.1Z" />
             <path d="M464.724 168.753C464.724 86.1115 397.73 19.1172 315.089 19.1172C232.447 19.1172 165.453 86.1115 165.453 168.753V461.464C165.453 544.106 232.447 611.1 315.089 611.1C397.73 611.1 464.724 544.106 464.724 461.464V168.753Z" />
@@ -73,6 +77,8 @@ document.querySelector('#app').innerHTML = `
             <path d="M312.792 524.404C371.228 582.84 465.972 582.84 524.409 524.404C582.845 465.967 582.845 371.223 524.409 312.787L317.431 105.809C258.994 47.3721 164.25 47.3722 105.814 105.809C47.3772 164.245 47.3772 258.989 105.814 317.426L312.792 524.404Z" />
             <path d="M131.804 209.294V420.921L315.088 526.761L498.372 420.921V209.294L315.088 103.48L131.804 209.294Z" />
           </svg>
+          </div>
+          <div class="three-armour" id="threeArmour" aria-label="Interactive 3D armour render"></div>
           <div class="armour-assembly" id="armourAssembly" aria-label="Exploded view of the Chiron X1 Elite protective suit">
             <div class="armour-piece piece-helmet"><img class="armour-part part-helmet" data-group="helmet" src="/assets/armour-deconstructed/helmet.png" alt="" /></div>
             <div class="armour-piece piece-shoulder-left"><img class="armour-part part-shoulder-left" data-group="shoulders" src="/assets/armour-deconstructed/shoulder-left.png" alt="" /></div>
@@ -85,6 +91,8 @@ document.querySelector('#app').innerHTML = `
             <div class="armour-piece piece-leg-right"><img class="armour-part part-leg-right" data-group="legs" src="/assets/armour-deconstructed/leg-right.png" alt="" /></div>
           </div>
           <img class="detail-image" id="detailImage" src="/assets/chiron-product-x1elite-helmet.png" alt="Chiron X1 Elite helmet" />
+          <div class="hover-aura" aria-hidden="true"></div>
+          <div class="scan-pulse" aria-hidden="true"></div>
           <div class="focus-halo" aria-hidden="true"></div>
           <button class="hotspot helmet" data-part="helmet" aria-label="Explore helmet"></button>
           <button class="hotspot shoulder-left" data-part="shoulders" aria-label="Explore shoulder protection"></button>
@@ -106,6 +114,19 @@ document.querySelector('#app').innerHTML = `
         <p id="partDescription"></p>
         <p id="partDetail"></p>
       </aside>
+
+      <div class="motion-control-shell">
+        <button class="motion-control-toggle" id="motionControlToggle" aria-expanded="false" aria-controls="motionControls">Motion tuner <span>+</span></button>
+        <section class="motion-controls" id="motionControls" aria-label="Line art animation controls">
+          <div class="motion-controls-head"><span>Line art controls</span><span>Live</span></div>
+          <label><span>Overall speed <output data-output="speed">0.5×</output></span><input data-motion-setting="speed" type="range" min="0.4" max="3" step="0.1" value="0.5" /></label>
+          <label><span>Path offset <output data-output="offset">0.80s</output></span><input data-motion-setting="offset" type="range" min="0" max="1.4" step="0.05" value="0.8" /></label>
+          <label><span>Minimum build <output data-output="buildAmount">50%</output></span><input data-motion-setting="buildAmount" type="range" min="0.5" max="0.85" step="0.05" value="0.5" /></label>
+          <label><span>Trim length <output data-output="trimLength">16%</output></span><input data-motion-setting="trimLength" type="range" min="0.08" max="0.32" step="0.01" value="0.16" /></label>
+          <label><span>Trim visibility <output data-output="trimOpacity">78%</output></span><input data-motion-setting="trimOpacity" type="range" min="0" max="1" step="0.02" value="0.78" /></label>
+          <button class="motion-reset" id="motionReset" type="button">Reset motion</button>
+        </section>
+      </div>
 
       <div class="lower-dots" aria-hidden="true"><i></i><i></i><i></i></div>
 
@@ -131,10 +152,13 @@ const viewport = document.querySelector('.viewport');
 const stage = document.querySelector('.stage');
 const productCanvas = document.querySelector('#productCanvas');
 const productMotion = document.querySelector('#productMotion');
+const threeArmour = document.querySelector('#threeArmour');
 const armourAssembly = document.querySelector('#armourAssembly');
 const detailImage = document.querySelector('#detailImage');
 const lineArt = document.querySelector('#lineArt');
-const lineArtPaths = createLineArtMasks();
+const lineArtMotion = document.querySelector('#lineArtMotion');
+const scanPulse = document.querySelector('.scan-pulse');
+const { buildPaths: lineArtPaths, trimPaths: lineArtTrimPaths } = createLineArtMasks();
 const partLabel = document.querySelector('#partLabel');
 const partLabelText = document.querySelector('#partLabelText');
 const detailPanel = document.querySelector('#detailPanel');
@@ -143,11 +167,24 @@ const partDescription = document.querySelector('#partDescription');
 const partDetail = document.querySelector('#partDetail');
 const closePanel = document.querySelector('#closePanel');
 const hint = document.querySelector('.interaction-hint');
+const motionControls = document.querySelector('#motionControls');
+const motionControlToggle = document.querySelector('#motionControlToggle');
+const motionReset = document.querySelector('#motionReset');
 let activePart = null;
 let hoverPart = null;
 let isLabelVisible = false;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let panelExitTween = null;
+let lineArtTweens = [];
+let armour3D = null;
+
+const lineArtSettings = {
+  speed: 0.5,
+  offset: 0.8,
+  buildAmount: 0.5,
+  trimLength: 0.16,
+  trimOpacity: 0.78
+};
 
 const closeupImages = {
   helmet: { src: '/assets/chiron-product-x1elite-helmet.png', alt: 'Chiron X1 Elite helmet' },
@@ -176,6 +213,55 @@ const hoverMotion = {
   ]
 };
 
+const hotspotCenters = {
+  helmet: { x: 50, y: 7 },
+  shoulders: { x: 50, y: 24 },
+  torso: { x: 50, y: 31 },
+  arms: { x: 50, y: 46 },
+  belt: { x: 50, y: 50 },
+  legs: { x: 50, y: 68 }
+};
+
+const threePartAnchors = {
+  Helmet: { x: 0.5, y: 0.07 },
+  Arm_Guard_Right: { x: 0.25, y: 0.23 },
+  Arm_Guard_Left: { x: 0.75, y: 0.23 },
+  Chest_Plate: { x: 0.5, y: 0.31 },
+  Glove_right: { x: 0.25, y: 0.46 },
+  Glove_Left: { x: 0.75, y: 0.46 },
+  Belt: { x: 0.5, y: 0.5 },
+  Thigh_Guard_Right: { x: 0.4, y: 0.57 },
+  Thigh_Guard_Left: { x: 0.6, y: 0.57 },
+  Knee_Guards_Right: { x: 0.38, y: 0.67 },
+  Knee_Guards_Left: { x: 0.62, y: 0.67 },
+  Boots_Right: { x: 0.37, y: 0.82 },
+  Boots_Left: { x: 0.63, y: 0.82 }
+};
+
+const threeHoverMotion = {
+  helmet: [{ name: 'Helmet', y: 0.022 }],
+  shoulders: [
+    { name: 'Arm_Guard_Right', x: -0.038 },
+    { name: 'Arm_Guard_Left', x: 0.038 }
+  ],
+  torso: [{ name: 'Chest_Plate', y: 0.016 }],
+  arms: [
+    { name: 'Arm_Guard_Right', x: -0.024 },
+    { name: 'Glove_right', x: -0.034, y: -0.008 },
+    { name: 'Arm_Guard_Left', x: 0.024 },
+    { name: 'Glove_Left', x: 0.034, y: -0.008 }
+  ],
+  belt: [{ name: 'Belt', y: -0.018 }],
+  legs: [
+    { name: 'Thigh_Guard_Right', x: -0.02 },
+    { name: 'Knee_Guards_Right', x: -0.028 },
+    { name: 'Boots_Right', x: -0.035, y: -0.012 },
+    { name: 'Thigh_Guard_Left', x: 0.02 },
+    { name: 'Knee_Guards_Left', x: 0.028 },
+    { name: 'Boots_Left', x: 0.035, y: -0.012 }
+  ]
+};
+
 const closureMotion = [
   { selector: '.piece-helmet', x: 0, y: 42 },
   { selector: '.piece-shoulder-left', x: 31, y: 8 },
@@ -196,7 +282,8 @@ const armourX = gsap.quickTo(armourAssembly, 'x', { duration: 0.72, ease: 'power
 const armourY = gsap.quickTo(armourAssembly, 'y', { duration: 0.72, ease: 'power3.out' });
 const lineArtX = gsap.quickTo(lineArt, 'x', { duration: 1.15, ease: 'power3.out' });
 const lineArtY = gsap.quickTo(lineArt, 'y', { duration: 1.15, ease: 'power3.out' });
-const lineArtRotation = gsap.quickTo(lineArt, 'rotation', { duration: 1.25, ease: 'power3.out' });
+const lineArtFocusX = gsap.quickTo(lineArtMotion, 'x', { duration: 0.65, ease: 'power3.out' });
+const lineArtFocusY = gsap.quickTo(lineArtMotion, 'y', { duration: 0.65, ease: 'power3.out' });
 const titleX = gsap.quickTo('.hero-title', 'x', { duration: 1.2, ease: 'power3.out' });
 const titleY = gsap.quickTo('.hero-title', 'y', { duration: 1.2, ease: 'power3.out' });
 const railsX = gsap.quickTo('.top-code', 'x', { duration: 1.3, ease: 'power3.out' });
@@ -214,6 +301,242 @@ function fitStage() {
   stage.style.setProperty('--stage-scale', scale);
   viewport.style.width = `${1440 * scale}px`;
   viewport.style.height = `${1024 * scale}px`;
+  resizeThreeArmour();
+}
+
+function resizeThreeArmour() {
+  if (!armour3D) return;
+  const { width, height } = threeArmour.getBoundingClientRect();
+  if (!width || !height) return;
+  const aspect = width / height;
+  const frustumHeight = 1.24;
+  const frustumWidth = frustumHeight * aspect;
+  const { camera, renderer } = armour3D;
+  camera.left = -frustumWidth / 2;
+  camera.right = frustumWidth / 2;
+  camera.top = frustumHeight / 2;
+  camera.bottom = -frustumHeight / 2;
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height, false);
+}
+
+function initThreeArmour() {
+  if (!threeArmour || !window.WebGLRenderingContext) return;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-0.4, 0.4, 0.62, -0.62, 0.1, 100);
+  camera.position.set(0, 0.52, 2.1);
+  camera.lookAt(0, 0.52, 0);
+
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.32;
+  threeArmour.append(renderer.domElement);
+
+  const armourGroup = new THREE.Group();
+  scene.add(armourGroup);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  scene.add(new THREE.HemisphereLight(0xf5f7ff, 0x4a4240, 2.25));
+
+  const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
+  keyLight.position.set(1.6, 2.6, 4);
+  scene.add(keyLight);
+
+  const frontFillLight = new THREE.DirectionalLight(0xffffff, 1.7);
+  frontFillLight.position.set(0, 0.7, 4.5);
+  scene.add(frontFillLight);
+
+  const fillLight = new THREE.DirectionalLight(0xd8dde7, 1.25);
+  fillLight.position.set(-2.4, 1.1, 2.8);
+  scene.add(fillLight);
+
+  const rimLight = new THREE.DirectionalLight(0xff6d54, 0.5);
+  rimLight.position.set(-1.5, 1.6, -1.5);
+  scene.add(rimLight);
+
+  armour3D = {
+    scene,
+    camera,
+    renderer,
+    armourGroup,
+    model: null,
+    targetRotationX: 0,
+    targetRotationY: 0,
+    targetPositionX: 0,
+    targetPositionY: 0,
+    isHoveringHotspot: false,
+    parts: new Map()
+  };
+  resizeThreeArmour();
+
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  loader.load('/models/body-armor.glb', (gltf) => {
+    const model = gltf.scene;
+    model.traverse((node) => {
+      if (node.isMesh) {
+        node.castShadow = false;
+        node.receiveShadow = false;
+        const materials = (Array.isArray(node.material) ? node.material : [node.material]).map((material) => material.clone());
+        node.material = Array.isArray(node.material) ? materials : materials[0];
+        materials.forEach((material) => {
+          if (!material?.isMeshStandardMaterial) return;
+          material.metalnessMap = null;
+          material.roughnessMap = null;
+          material.metalness = 0.08;
+          material.roughness = 0.9;
+          material.normalScale.set(0.72, 0.72);
+          material.envMapIntensity = 0.15;
+          material.needsUpdate = true;
+        });
+        armour3D.parts.set(node.name, {
+          node,
+          basePosition: node.position.clone(),
+          targetPosition: node.position.clone(),
+          hoverOffset: new THREE.Vector3(),
+          proximityOffset: new THREE.Vector3(),
+          variantOffset: new THREE.Vector3(),
+          idleOffset: new THREE.Vector3(),
+          materials,
+          baseColors: materials.map((material) => material.color.clone())
+        });
+      }
+    });
+    armourGroup.add(model);
+    armour3D.model = model;
+    stage.classList.add('is-three-loaded');
+  }, undefined, (error) => {
+    console.warn('The 3D armour model could not be loaded; using the image assembly instead.', error);
+    renderer.dispose();
+    threeArmour.replaceChildren();
+    armour3D = null;
+  });
+
+  function render() {
+    requestAnimationFrame(render);
+    if (armour3D?.model && !reducedMotion) {
+      armourGroup.rotation.x += (armour3D.targetRotationX - armourGroup.rotation.x) * 0.055;
+      armourGroup.rotation.y += (armour3D.targetRotationY - armourGroup.rotation.y) * 0.055;
+      armourGroup.position.x += (armour3D.targetPositionX - armourGroup.position.x) * 0.06;
+      armourGroup.position.y += (armour3D.targetPositionY - armourGroup.position.y) * 0.06;
+      const breath = Math.sin(performance.now() / 1800);
+      armour3D.parts.forEach(({ node, basePosition, targetPosition, hoverOffset, proximityOffset, variantOffset, idleOffset }, name) => {
+        idleOffset.set(0, (name === 'Helmet' ? 0.004 : name === 'Chest_Plate' ? 0.0025 : 0) * breath, 0);
+        targetPosition.copy(basePosition).add(hoverOffset).add(proximityOffset).add(variantOffset).add(idleOffset);
+        node.position.lerp(targetPosition, 0.12);
+      });
+    }
+    renderer.render(scene, camera);
+  }
+
+  render();
+}
+
+function setThreeArmourHover(isHovering) {
+  if (armour3D?.model) armour3D.isHoveringHotspot = isHovering;
+}
+
+function setHotspotAccent(partName = null) {
+  if (!partName) {
+    stage.removeAttribute('data-hover-part');
+    lineArtFocusX(0);
+    lineArtFocusY(0);
+    return;
+  }
+  const center = hotspotCenters[partName];
+  if (!center) return;
+  stage.dataset.hoverPart = partName;
+  productCanvas.style.setProperty('--focus-x', `${center.x}%`);
+  productCanvas.style.setProperty('--focus-y', `${center.y}%`);
+  lineArtFocusX((center.x - 50) * 0.12);
+  lineArtFocusY((center.y - 50) * 0.1);
+}
+
+function triggerSelectionScan(partName) {
+  const center = hotspotCenters[partName];
+  if (!center || reducedMotion) return;
+  productCanvas.style.setProperty('--focus-x', `${center.x}%`);
+  productCanvas.style.setProperty('--focus-y', `${center.y}%`);
+  const scan = gsap.timeline({ defaults: { ease: 'power2.out', overwrite: 'auto' } });
+  scan
+    .set(scanPulse, { autoAlpha: 0, scale: 0.35 })
+    .to(scanPulse, { autoAlpha: 0.7, scale: 1.25, duration: 0.28 })
+    .to(scanPulse, { autoAlpha: 0, scale: 1.8, duration: 0.48, ease: 'power1.in' });
+  gsap.fromTo(lineArtMotion, { scale: 0.985 }, { scale: 1.03, duration: 0.22, ease: 'power2.out', yoyo: true, repeat: 1, overwrite: 'auto' });
+}
+
+function animateThreeArmourParts(partName = null) {
+  if (!armour3D?.model || reducedMotion) return;
+  if (partName) resetThreeArmourProximity();
+  armour3D.parts.forEach((part) => {
+    part.hoverOffset.set(0, 0, 0);
+    part.materials.forEach((material, index) => {
+      const baseColor = part.baseColors[index];
+      gsap.to(material.color, { r: baseColor.r, g: baseColor.g, b: baseColor.b, duration: 0.28, ease: 'power2.out', overwrite: 'auto' });
+    });
+  });
+  if (!partName || activePart) return;
+
+  threeHoverMotion[partName]?.forEach(({ name, x = 0, y = 0, z = 0 }) => {
+    const part = armour3D.parts.get(name);
+    if (part) {
+      part.hoverOffset.set(x, y, z);
+      part.materials.forEach((material, index) => {
+        const baseColor = part.baseColors[index];
+        gsap.to(material.color, { r: Math.min(baseColor.r * 1.16, 1), g: Math.min(baseColor.g * 1.1, 1), b: Math.min(baseColor.b * 1.06, 1), duration: 0.24, ease: 'power2.out', overwrite: 'auto' });
+      });
+    }
+  });
+}
+
+function updateThreeArmourProximity(event) {
+  if (!armour3D?.model || activePart || hoverPart) return;
+  const rect = productCanvas.getBoundingClientRect();
+  const cursorX = (event.clientX - rect.left) / rect.width;
+  const cursorY = (event.clientY - rect.top) / rect.height;
+  const isInside = cursorX >= 0 && cursorX <= 1 && cursorY >= 0 && cursorY <= 1;
+
+  armour3D.parts.forEach((part, name) => {
+    const anchor = threePartAnchors[name];
+    if (!anchor || !isInside) {
+      part.proximityOffset.set(0, 0, 0);
+      return;
+    }
+    const distance = Math.hypot(cursorX - anchor.x, cursorY - anchor.y);
+    const strength = Math.max(0, 1 - distance / 0.24) * 0.011;
+    part.proximityOffset.set(
+      Math.sign(anchor.x - 0.5) * strength,
+      Math.sign(0.5 - anchor.y) * strength * 0.45,
+      0
+    );
+  });
+}
+
+function resetThreeArmourProximity() {
+  armour3D?.parts.forEach((part) => part.proximityOffset.set(0, 0, 0));
+}
+
+function playVariantTransition() {
+  if (!armour3D?.model || reducedMotion) return;
+  const transition = gsap.timeline({ defaults: { ease: 'power2.inOut', overwrite: 'auto' } });
+  transition
+    .to(armour3D.armourGroup.scale, { x: 0.975, y: 0.975, z: 0.975, duration: 0.18 })
+    .to(armour3D.armourGroup.scale, { x: 1, y: 1, z: 1, duration: 0.38, ease: 'back.out(1.4)' });
+  armour3D.parts.forEach((part, name) => {
+    const anchor = threePartAnchors[name];
+    if (!anchor) return;
+    const amount = name === 'Chest_Plate' || name === 'Belt' ? 0.006 : 0.014;
+    gsap.fromTo(part.variantOffset, { x: 0, y: 0 }, {
+      x: Math.sign(anchor.x - 0.5) * amount,
+      y: Math.sign(0.5 - anchor.y) * amount * 0.45,
+      duration: 0.26,
+      ease: 'power2.out',
+      yoyo: true,
+      repeat: 1
+    });
+  });
 }
 
 function positionLabel(clientX, clientY) {
@@ -245,12 +568,14 @@ function hideLabel() {
 
 function resetArmourHover() {
   if (reducedMotion) return;
+  animateThreeArmourParts();
   gsap.to('.armour-part', { x: 0, y: 0, rotation: 0, scale: 1, duration: 0.42, ease: 'power3.out', overwrite: 'auto' });
 }
 
 function animateArmourHover(partName) {
   if (reducedMotion || activePart) return;
   resetArmourHover();
+  animateThreeArmourParts(partName);
   hoverMotion[partName]?.forEach(({ selector, vars }) => {
     gsap.to(selector, { ...vars, duration: 0.5, ease: 'power3.out', overwrite: 'auto' });
   });
@@ -281,6 +606,8 @@ function selectPart(partName) {
   productCanvas.classList.add('is-focused');
   hint.classList.add('is-hidden');
   resetArmourHover();
+  setHotspotAccent();
+  triggerSelectionScan(partName);
 
   if (!reducedMotion) {
     const selection = gsap.timeline({ defaults: { ease: 'power3.out', overwrite: 'auto' } });
@@ -315,6 +642,7 @@ function clearSelection() {
   productCanvas.classList.remove('is-focused');
   hideLabel();
   hint.classList.remove('is-hidden');
+  setHotspotAccent();
 
   if (!reducedMotion) gsap.to(productMotion, { scale: 1, rotation: 0, duration: 0.3, ease: 'power2.out', overwrite: 'auto' });
 }
@@ -322,6 +650,8 @@ function clearSelection() {
 document.querySelectorAll('.hotspot').forEach((hotspot) => {
   hotspot.addEventListener('mouseenter', (event) => {
     hoverPart = hotspot.dataset.part;
+    setThreeArmourHover(true);
+    setHotspotAccent(hoverPart);
     showLabel(hoverPart, event.clientX, event.clientY);
     animateArmourHover(hoverPart);
   });
@@ -330,17 +660,25 @@ document.querySelectorAll('.hotspot').forEach((hotspot) => {
   });
   hotspot.addEventListener('mouseleave', () => {
     hoverPart = null;
+    setThreeArmourHover(false);
+    setHotspotAccent();
+    resetThreeArmourProximity();
     hideLabel();
     resetArmourHover();
   });
   hotspot.addEventListener('focus', () => {
     hoverPart = hotspot.dataset.part;
+    setThreeArmourHover(true);
+    setHotspotAccent(hoverPart);
     const rect = hotspot.getBoundingClientRect();
     showLabel(hoverPart, rect.left + rect.width / 2, rect.top + rect.height / 2);
     animateArmourHover(hoverPart);
   });
   hotspot.addEventListener('blur', () => {
     hoverPart = null;
+    setThreeArmourHover(false);
+    setHotspotAccent();
+    resetThreeArmourProximity();
     hideLabel();
     resetArmourHover();
   });
@@ -352,10 +690,46 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && activePart) clearSelection();
 });
 
+function formatMotionValue(setting, value) {
+  if (setting === 'speed') return `${value.toFixed(1)}×`;
+  if (setting === 'offset') return `${value.toFixed(2)}s`;
+  return `${Math.round(value * 100)}%`;
+}
+
+function updateMotionControls() {
+  document.querySelectorAll('[data-motion-setting]').forEach((input) => {
+    const setting = input.dataset.motionSetting;
+    input.value = lineArtSettings[setting];
+    document.querySelector(`[data-output="${setting}"]`).textContent = formatMotionValue(setting, lineArtSettings[setting]);
+  });
+  playLineArt();
+}
+
+motionControlToggle.addEventListener('click', () => {
+  const isOpen = motionControls.classList.toggle('is-open');
+  motionControlToggle.setAttribute('aria-expanded', String(isOpen));
+  motionControlToggle.querySelector('span').textContent = isOpen ? '−' : '+';
+});
+
+document.querySelectorAll('[data-motion-setting]').forEach((input) => {
+  input.addEventListener('input', () => {
+    const setting = input.dataset.motionSetting;
+    lineArtSettings[setting] = Number(input.value);
+    document.querySelector(`[data-output="${setting}"]`).textContent = formatMotionValue(setting, lineArtSettings[setting]);
+    playLineArt();
+  });
+});
+
+motionReset.addEventListener('click', () => {
+  Object.assign(lineArtSettings, { speed: 0.5, offset: 0.8, buildAmount: 0.5, trimLength: 0.16, trimOpacity: 0.78 });
+  updateMotionControls();
+});
+
 document.querySelectorAll('.variant').forEach((button) => {
   button.addEventListener('click', () => {
     document.querySelectorAll('.variant').forEach((item) => item.classList.remove('active'));
     button.classList.add('active');
+    playVariantTransition();
   });
 });
 
@@ -383,11 +757,18 @@ function playIntro() {
     .to('.status-dots i, .lower-dots i', { scale: 1.3, duration: 0.13, stagger: 0.055, ease: 'power2.out' })
     .to('.status-dots i, .lower-dots i', { scale: 1, duration: 0.22, stagger: 0.045, ease: 'power2.in' });
 
+  gsap.to('.chevrons', { x: 7, autoAlpha: 0.48, duration: 0.9, ease: 'sine.inOut', yoyo: true, repeat: -1, repeatDelay: 1.7 });
+  gsap.to('.serial', { autoAlpha: 0.42, duration: 0.24, ease: 'steps(2)', yoyo: true, repeat: -1, repeatDelay: 3.8 });
+
   playLineArt();
 }
 
 function playLineArt() {
+  lineArtTweens.forEach((tween) => tween.kill());
+  lineArtTweens = [];
   const lengths = lineArtPaths.map((path) => path.getTotalLength());
+  const trimLengths = lineArtTrimPaths.map((path) => path.getTotalLength());
+  lineArt.style.setProperty('--trim-opacity', lineArtSettings.trimOpacity);
   if (reducedMotion) {
     lineArtPaths.forEach((path) => {
       path.style.strokeDasharray = '';
@@ -397,22 +778,39 @@ function playLineArt() {
   }
 
   lineArtPaths.forEach((path, index) => {
-    path.style.strokeDasharray = `${lengths[index]}`;
-    path.style.strokeDashoffset = `${lengths[index]}`;
+    const length = lengths[index];
+    const segmentLength = length * lineArtSettings.buildAmount;
+    const cycleLength = segmentLength + length;
+    path.style.strokeDasharray = `${segmentLength} ${length}`;
+    path.style.strokeDashoffset = `${-cycleLength * gsap.utils.random(0, 1)}`;
   });
 
-  const lineLoop = gsap.timeline({ repeat: -1, repeatDelay: 0.7, defaults: { ease: 'power1.inOut' } });
-  lineLoop
-    .to(lineArtPaths, {
-      strokeDashoffset: (index) => 0,
-      duration: 0.72,
-      stagger: { each: 0.13, from: 'start' }
-    })
-    .to(lineArtPaths, {
-      strokeDashoffset: (index) => -lengths[index],
-      duration: 0.82,
-      stagger: { each: 0.14, from: 'end' }
-    }, '+=1.4');
+  lineArtPaths.forEach((path, index) => {
+    const cycleLength = lengths[index] * (1 + lineArtSettings.buildAmount);
+    lineArtTweens.push(gsap.to(path, {
+      strokeDashoffset: `-=${cycleLength}`,
+      duration: () => gsap.utils.random(2.67, 4.67) / lineArtSettings.speed,
+      ease: 'none',
+      repeat: -1,
+      delay: index * lineArtSettings.offset
+    }));
+  });
+
+  lineArtTrimPaths.forEach((path, index) => {
+    const length = trimLengths[index];
+    const segmentLength = Math.min(Math.max(length * lineArtSettings.trimLength, 76), 250);
+    const cycleLength = segmentLength + length;
+    path.style.strokeDasharray = `${segmentLength} ${length}`;
+    path.style.strokeDashoffset = `${-cycleLength * gsap.utils.random(0, 1)}`;
+    lineArtTweens.push(gsap.to(path, {
+      strokeDashoffset: `-=${cycleLength}`,
+      duration: gsap.utils.random(2.2, 3.6) / lineArtSettings.speed,
+      ease: 'none',
+      repeat: -1,
+      delay: index * lineArtSettings.offset * 0.35
+    }));
+  });
+
 }
 
 function createLineArtMasks() {
@@ -432,7 +830,7 @@ function createLineArtMasks() {
     mask.setAttribute('height', '631');
     maskPath.setAttribute('stroke', '#fff');
     maskPath.setAttribute('fill', 'none');
-    maskPath.setAttribute('stroke-width', '2.2');
+    maskPath.setAttribute('stroke-width', '3.2');
     maskPath.setAttribute('stroke-linecap', 'round');
     maskPath.setAttribute('stroke-dasharray', '0');
     mask.append(maskPath);
@@ -441,8 +839,33 @@ function createLineArtMasks() {
     return maskPath;
   });
 
+  const trimPaths = visiblePaths.map((path, index) => {
+    const mask = document.createElementNS(namespace, 'mask');
+    const maskPath = path.cloneNode();
+    const trimPath = path.cloneNode();
+    mask.setAttribute('id', `line-art-trim-mask-${index}`);
+    mask.setAttribute('maskUnits', 'userSpaceOnUse');
+    mask.setAttribute('mask-type', 'alpha');
+    mask.setAttribute('x', '0');
+    mask.setAttribute('y', '0');
+    mask.setAttribute('width', '631');
+    mask.setAttribute('height', '631');
+    maskPath.setAttribute('stroke', '#fff');
+    maskPath.setAttribute('fill', 'none');
+    maskPath.setAttribute('stroke-width', '3.8');
+    maskPath.setAttribute('stroke-linecap', 'round');
+    maskPath.setAttribute('stroke-dasharray', '0');
+    mask.append(maskPath);
+    defs.append(mask);
+    trimPath.removeAttribute('mask');
+    trimPath.setAttribute('class', 'line-art-trim');
+    trimPath.setAttribute('mask', `url(#line-art-trim-mask-${index})`);
+    lineArt.append(trimPath);
+    return maskPath;
+  });
+
   lineArt.prepend(defs);
-  return maskPaths;
+  return { buildPaths: maskPaths, trimPaths };
 }
 
 stage.addEventListener('pointermove', (event) => {
@@ -462,10 +885,16 @@ stage.addEventListener('pointermove', (event) => {
   armourY(y * 4);
   lineArtX(x * -15);
   lineArtY(y * -11);
-  lineArtRotation(x * -0.65);
   titleX(x * -11);
   titleY(y * -5);
   railsX(x * -6);
+  if (armour3D?.model) {
+    armour3D.targetRotationX = -y * 0.055;
+    armour3D.targetRotationY = x * 0.13;
+    armour3D.targetPositionX = x * 0.012;
+    armour3D.targetPositionY = -y * 0.008;
+    updateThreeArmourProximity(event);
+  }
   setArmourClosure(closure);
 });
 
@@ -477,13 +906,25 @@ stage.addEventListener('pointerleave', () => {
   armourY(0);
   lineArtX(0);
   lineArtY(0);
-  lineArtRotation(0);
   titleX(0);
   titleY(0);
   railsX(0);
+  if (armour3D?.model) {
+    gsap.to(armour3D, {
+      targetRotationX: 0,
+      targetRotationY: 0,
+      targetPositionX: 0,
+      targetPositionY: 0,
+      duration: 0.78,
+      ease: 'back.out(1.25)',
+      overwrite: 'auto'
+    });
+    resetThreeArmourProximity();
+  }
   setArmourClosure(1);
 });
 
 window.addEventListener('resize', fitStage);
 fitStage();
+initThreeArmour();
 playIntro();
