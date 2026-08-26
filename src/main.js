@@ -356,6 +356,10 @@ function initThreeArmour() {
   rimLight.position.set(-1.5, 1.6, -1.5);
   scene.add(rimLight);
 
+  const orbitLight = new THREE.PointLight(0xfff1e7, 2.6, 2.4, 2);
+  orbitLight.position.set(0.95, 0.76, 0.85);
+  scene.add(orbitLight);
+
   armour3D = {
     scene,
     camera,
@@ -367,6 +371,8 @@ function initThreeArmour() {
     targetPositionX: 0,
     targetPositionY: 0,
     isHoveringHotspot: false,
+    orbitLight,
+    targetOrbitLightPosition: orbitLight.position.clone(),
     parts: new Map()
   };
   resizeThreeArmour();
@@ -385,9 +391,9 @@ function initThreeArmour() {
           if (!material?.isMeshStandardMaterial) return;
           material.metalnessMap = null;
           material.roughnessMap = null;
-          material.metalness = 0.08;
-          material.roughness = 0.9;
-          material.normalScale.set(0.72, 0.72);
+          material.metalness = 0.18;
+          material.roughness = 0.68;
+          material.normalScale.set(0.8, 0.8);
           material.envMapIntensity = 0.15;
           material.needsUpdate = true;
         });
@@ -422,6 +428,7 @@ function initThreeArmour() {
       armourGroup.position.x += (armour3D.targetPositionX - armourGroup.position.x) * 0.06;
       armourGroup.position.y += (armour3D.targetPositionY - armourGroup.position.y) * 0.06;
       const breath = Math.sin(performance.now() / 1800);
+      armour3D.orbitLight.position.lerp(armour3D.targetOrbitLightPosition, 0.055);
       armour3D.parts.forEach(({ node, basePosition, targetPosition, hoverOffset, proximityOffset, variantOffset, idleOffset }, name) => {
         idleOffset.set(0, (name === 'Helmet' ? 0.004 : name === 'Chest_Plate' ? 0.0025 : 0) * breath, 0);
         targetPosition.copy(basePosition).add(hoverOffset).add(proximityOffset).add(variantOffset).add(idleOffset);
@@ -893,6 +900,8 @@ stage.addEventListener('pointermove', (event) => {
     armour3D.targetRotationY = x * 0.13;
     armour3D.targetPositionX = x * 0.012;
     armour3D.targetPositionY = -y * 0.008;
+    gsap.killTweensOf(armour3D.targetOrbitLightPosition);
+    armour3D.targetOrbitLightPosition.set(-x * 1.05, 0.76 + y * 0.32, 0.85);
     updateThreeArmourProximity(event);
   }
   setArmourClosure(closure);
@@ -915,6 +924,14 @@ stage.addEventListener('pointerleave', () => {
       targetRotationY: 0,
       targetPositionX: 0,
       targetPositionY: 0,
+      duration: 0.78,
+      ease: 'back.out(1.25)',
+      overwrite: 'auto'
+    });
+    gsap.to(armour3D.targetOrbitLightPosition, {
+      x: 0.95,
+      y: 0.76,
+      z: 0.85,
       duration: 0.78,
       ease: 'back.out(1.25)',
       overwrite: 'auto'
