@@ -46,9 +46,10 @@ const parts = {
 document.querySelector('#app').innerHTML = `
   <div class="viewport">
     <section class="stage" aria-label="Chiron X1 Elite interactive product view">
+      <div class="grain-overlay" aria-hidden="true"></div>
       <header class="site-header">
         <a class="brand" href="#" aria-label="Chiron Global Tech home">
-          <span class="brand-mark"><img src="/assets/logo.png" alt="" /></span>
+          <span class="brand-mark"><img src="/assets/chiron-mark.svg" alt="" /></span>
           <span class="brand-name">CHIRON<br />GLOBAL<br />TECH</span>
         </a>
         <nav class="nav" aria-label="Primary navigation">
@@ -135,6 +136,12 @@ document.querySelector('#app').innerHTML = `
         </section>
       </div>
 
+      <section class="grain-control" aria-label="Grain controls">
+        <div class="grain-control-head"><span>Grain overlay</span><output id="grainIntensityOutput">75%</output></div>
+        <label for="grainIntensity">Intensity</label>
+        <input id="grainIntensity" type="range" min="0" max="1" step="0.01" value="0.75" />
+      </section>
+
       <div class="lower-dots" aria-hidden="true"><i></i><i></i><i></i></div>
 
       <div class="variant-list" role="group" aria-label="Product variants">
@@ -177,6 +184,9 @@ const hint = document.querySelector('.interaction-hint');
 const motionControls = document.querySelector('#motionControls');
 const motionControlToggle = document.querySelector('#motionControlToggle');
 const motionReset = document.querySelector('#motionReset');
+const grainOverlay = document.querySelector('.grain-overlay');
+const grainIntensity = document.querySelector('#grainIntensity');
+const grainIntensityOutput = document.querySelector('#grainIntensityOutput');
 const viewControls = document.querySelectorAll('.view-control');
 const autoRotateControl = document.querySelector('#autoRotateControl');
 let activePart = null;
@@ -810,6 +820,12 @@ document.querySelectorAll('[data-motion-setting]').forEach((input) => {
 motionReset.addEventListener('click', () => {
   Object.assign(lineArtSettings, { speed: 0.5, offset: 0.8, buildAmount: 0.5, trimLength: 0.16, trimOpacity: 0.78 });
   updateMotionControls();
+});
+
+grainIntensity.addEventListener('input', () => {
+  const intensity = Number(grainIntensity.value);
+  grainOverlay.style.opacity = intensity;
+  grainIntensityOutput.textContent = `${Math.round(intensity * 100)}%`;
 });
 
 document.querySelectorAll('.variant').forEach((button) => {
