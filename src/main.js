@@ -109,6 +109,13 @@ document.querySelector('#app').innerHTML = `
         <span id="partLabelText">Helmet</span><span class="arrow">↗</span>
       </div>
 
+      <div class="view-controls" role="group" aria-label="Armour view">
+        <button class="view-control active" type="button" data-view="front">Front</button>
+        <button class="view-control" type="button" data-view="side">Side</button>
+        <button class="view-control" type="button" data-view="back">Back</button>
+        <button class="view-control auto-rotate-control" id="autoRotateControl" type="button" aria-pressed="false">Play</button>
+      </div>
+
       <aside class="detail-panel" id="detailPanel" aria-live="polite" aria-hidden="true">
         <div class="detail-meta"><span id="partCode">X1-H01</span><button id="closePanel" aria-label="Close detail panel">×</button></div>
         <p id="partDescription"></p>
@@ -170,6 +177,8 @@ const hint = document.querySelector('.interaction-hint');
 const motionControls = document.querySelector('#motionControls');
 const motionControlToggle = document.querySelector('#motionControlToggle');
 const motionReset = document.querySelector('#motionReset');
+const viewControls = document.querySelectorAll('.view-control');
+const autoRotateControl = document.querySelector('#autoRotateControl');
 let activePart = null;
 let hoverPart = null;
 let isLabelVisible = false;
@@ -177,6 +186,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
 let panelExitTween = null;
 let lineArtTweens = [];
 let armour3D = null;
+let isAutoRotateEnabled = false;
 
 const lineArtSettings = {
   speed: 0.5,
@@ -238,8 +248,23 @@ const threePartAnchors = {
   Boots_Left: { x: 0.63, y: 0.82 }
 };
 
+const threeAssemblyMotion = {
+  Helmet: { compact: [0, -0.014], expanded: [0, 0.008] },
+  Arm_Guard_Right: { compact: [0.016, 0], expanded: [-0.02, 0.004] },
+  Arm_Guard_Left: { compact: [-0.016, 0], expanded: [0.02, 0.004] },
+  Glove_right: { compact: [0.014, 0.012], expanded: [-0.018, -0.01] },
+  Glove_Left: { compact: [-0.014, 0.012], expanded: [0.018, -0.01] },
+  Belt: { compact: [0, 0.012], expanded: [0, -0.014] },
+  Thigh_Guard_Right: { compact: [0.01, 0.014], expanded: [-0.012, -0.014] },
+  Thigh_Guard_Left: { compact: [-0.01, 0.014], expanded: [0.012, -0.014] },
+  Knee_Guards_Right: { compact: [0.012, 0.016], expanded: [-0.014, -0.016] },
+  Knee_Guards_Left: { compact: [-0.012, 0.016], expanded: [0.014, -0.016] },
+  Boots_Right: { compact: [0.014, 0.018], expanded: [-0.016, -0.02] },
+  Boots_Left: { compact: [-0.014, 0.018], expanded: [0.016, -0.02] }
+};
+
 const threeHoverMotion = {
-  helmet: [{ name: 'Helmet', y: 0.022 }],
+  helmet: [{ name: 'Helmet', y: 0.008 }],
   shoulders: [
     { name: 'Arm_Guard_Right', x: -0.038 },
     { name: 'Arm_Guard_Left', x: 0.038 }
@@ -309,7 +334,7 @@ function resizeThreeArmour() {
   const { width, height } = threeArmour.getBoundingClientRect();
   if (!width || !height) return;
   const aspect = width / height;
-  const frustumHeight = 1.24;
+  const frustumHeight = 1.3;
   const frustumWidth = frustumHeight * aspect;
   const { camera, renderer } = armour3D;
   camera.left = -frustumWidth / 2;
@@ -368,11 +393,17 @@ function initThreeArmour() {
     model: null,
     targetRotationX: 0,
     targetRotationY: 0,
+    viewRotationY: 0,
+    pointerX: 0,
+    autoRotate: isAutoRotateEnabled,
+    lastFrameTime: performance.now(),
     targetPositionX: 0,
     targetPositionY: 0,
     isHoveringHotspot: false,
     orbitLight,
     targetOrbitLightPosition: orbitLight.position.clone(),
+    assemblyProgress: 0,
+    targetAssemblyProgress: 0,
     parts: new Map()
   };
   resizeThreeArmour();
@@ -381,6 +412,12 @@ function initThreeArmour() {
   loader.setMeshoptDecoder(MeshoptDecoder);
   loader.load('/models/body-armor.glb', (gltf) => {
     const model = gltf.scene;
+    model.scale.setScalar(1.15);
+    model.position.y = -0.07;
+    model.updateMatrixWorld(true);
+    const modelCenter = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+    model.position.x -= modelCenter.x;
+    model.position.z -= modelCenter.z;
     model.traverse((node) => {
       if (node.isMesh) {
         node.castShadow = false;
@@ -405,6 +442,7 @@ function initThreeArmour() {
           proximityOffset: new THREE.Vector3(),
           variantOffset: new THREE.Vector3(),
           idleOffset: new THREE.Vector3(),
+          assemblyOffset: new THREE.Vector3(),
           materials,
           baseColors: materials.map((material) => material.color.clone())
         });
@@ -423,15 +461,31 @@ function initThreeArmour() {
   function render() {
     requestAnimationFrame(render);
     if (armour3D?.model && !reducedMotion) {
+      const now = performance.now();
+      const delta = Math.min((now - armour3D.lastFrameTime) / 1000, 0.05);
+      armour3D.lastFrameTime = now;
+      if (armour3D.autoRotate && !activePart) {
+        armour3D.viewRotationY += delta * (Math.PI * 2 / 12);
+        armour3D.targetRotationY = armour3D.viewRotationY + armour3D.pointerX * 0.13;
+      }
       armourGroup.rotation.x += (armour3D.targetRotationX - armourGroup.rotation.x) * 0.055;
       armourGroup.rotation.y += (armour3D.targetRotationY - armourGroup.rotation.y) * 0.055;
       armourGroup.position.x += (armour3D.targetPositionX - armourGroup.position.x) * 0.06;
       armourGroup.position.y += (armour3D.targetPositionY - armourGroup.position.y) * 0.06;
+      armour3D.assemblyProgress += (armour3D.targetAssemblyProgress - armour3D.assemblyProgress) * 0.075;
       const breath = Math.sin(performance.now() / 1800);
       armour3D.orbitLight.position.lerp(armour3D.targetOrbitLightPosition, 0.055);
-      armour3D.parts.forEach(({ node, basePosition, targetPosition, hoverOffset, proximityOffset, variantOffset, idleOffset }, name) => {
+      armour3D.parts.forEach(({ node, basePosition, targetPosition, hoverOffset, proximityOffset, variantOffset, idleOffset, assemblyOffset }, name) => {
+        const assembly = threeAssemblyMotion[name];
+        if (assembly) {
+          assemblyOffset.set(
+            THREE.MathUtils.lerp(assembly.compact[0], assembly.expanded[0], armour3D.assemblyProgress),
+            THREE.MathUtils.lerp(assembly.compact[1], assembly.expanded[1], armour3D.assemblyProgress),
+            0
+          );
+        }
         idleOffset.set(0, (name === 'Helmet' ? 0.004 : name === 'Chest_Plate' ? 0.0025 : 0) * breath, 0);
-        targetPosition.copy(basePosition).add(hoverOffset).add(proximityOffset).add(variantOffset).add(idleOffset);
+        targetPosition.copy(basePosition).add(assemblyOffset).add(hoverOffset).add(proximityOffset).add(variantOffset).add(idleOffset);
         node.position.lerp(targetPosition, 0.12);
       });
     }
@@ -443,6 +497,26 @@ function initThreeArmour() {
 
 function setThreeArmourHover(isHovering) {
   if (armour3D?.model) armour3D.isHoveringHotspot = isHovering;
+}
+
+function setArmourView(view) {
+  const views = { front: 0, side: Math.PI / 2, back: Math.PI };
+  if (!Object.hasOwn(views, view)) return;
+  viewControls.forEach((button) => button.classList.toggle('active', button.dataset.view === view));
+  if (!armour3D?.model) return;
+  armour3D.viewRotationY = views[view];
+  armour3D.targetRotationY = armour3D.viewRotationY + armour3D.pointerX * 0.13;
+}
+
+function setAutoRotate(enabled) {
+  isAutoRotateEnabled = enabled;
+  autoRotateControl.textContent = enabled ? 'Pause' : 'Play';
+  autoRotateControl.setAttribute('aria-pressed', String(enabled));
+  autoRotateControl.classList.toggle('active', enabled);
+  if (armour3D?.model) {
+    armour3D.autoRotate = enabled;
+    armour3D.lastFrameTime = performance.now();
+  }
 }
 
 function setHotspotAccent(partName = null) {
@@ -697,6 +771,12 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && activePart) clearSelection();
 });
 
+viewControls.forEach((button) => {
+  if (button.dataset.view) button.addEventListener('click', () => setArmourView(button.dataset.view));
+});
+
+autoRotateControl.addEventListener('click', () => setAutoRotate(!isAutoRotateEnabled));
+
 function formatMotionValue(setting, value) {
   if (setting === 'speed') return `${value.toFixed(1)}×`;
   if (setting === 'offset') return `${value.toFixed(2)}s`;
@@ -896,10 +976,12 @@ stage.addEventListener('pointermove', (event) => {
   titleY(y * -5);
   railsX(x * -6);
   if (armour3D?.model) {
+    armour3D.pointerX = x;
     armour3D.targetRotationX = -y * 0.055;
-    armour3D.targetRotationY = x * 0.13;
+    armour3D.targetRotationY = armour3D.viewRotationY + x * 0.13;
     armour3D.targetPositionX = x * 0.012;
     armour3D.targetPositionY = -y * 0.008;
+    armour3D.targetAssemblyProgress = outsideDistance === 0 ? 1 : 0;
     gsap.killTweensOf(armour3D.targetOrbitLightPosition);
     armour3D.targetOrbitLightPosition.set(-x * 1.05, 0.76 + y * 0.32, 0.85);
     updateThreeArmourProximity(event);
@@ -919,11 +1001,13 @@ stage.addEventListener('pointerleave', () => {
   titleY(0);
   railsX(0);
   if (armour3D?.model) {
+    armour3D.pointerX = 0;
     gsap.to(armour3D, {
       targetRotationX: 0,
-      targetRotationY: 0,
+      targetRotationY: armour3D.viewRotationY,
       targetPositionX: 0,
       targetPositionY: 0,
+      targetAssemblyProgress: 0,
       duration: 0.78,
       ease: 'back.out(1.25)',
       overwrite: 'auto'

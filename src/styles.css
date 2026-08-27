@@ -493,6 +493,39 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .part-label .arrow { margin-left: 20px; font-size: 24px; font-weight: 300; line-height: 1; }
 
+.view-controls {
+  position: absolute;
+  z-index: 6;
+  top: 205px;
+  left: 365px;
+  display: grid;
+  width: 86px;
+  border-top: 2px solid #ff474d;
+}
+
+.view-control {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid rgba(134, 134, 134, .56);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8d8d8d;
+  background: rgba(37, 37, 37, .9);
+  font-family: 'KH Interference', monospace;
+  font-size: 10px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease, padding 180ms ease;
+}
+
+.view-control::after { content: '↗'; opacity: 0; transform: translateX(-3px); transition: opacity 180ms ease, transform 180ms ease; }
+.view-control:hover, .view-control:focus-visible, .view-control.active { padding-left: 13px; color: #f1f1f1; background: #252525; }
+.view-control.active::after { opacity: 1; transform: translateX(0); color: #ff5b4d; }
+.view-control:focus-visible { outline: 1px solid #ff5b4d; outline-offset: 2px; }
+
 .detail-panel {
   position: absolute;
   z-index: 9;
